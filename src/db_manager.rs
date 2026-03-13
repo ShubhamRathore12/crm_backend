@@ -20,6 +20,7 @@ impl DbManager {
     pub fn new(primary: PgPool, secondary: Option<PgPool>) -> Self {
         let (tx, mut rx) = mpsc::unbounded_channel::<QueuedWrite>();
         let primary_clone = primary.clone();
+        let tx_retry = tx.clone();
         
         tokio::spawn(async move {
             while let Some(mut item) = rx.recv().await {
@@ -33,7 +34,7 @@ impl DbManager {
                         item.retries += 1;
                         if item.retries < 10 {
                             warn!("Primary write failed, retrying in background ({}): {}", item.retries, e);
-                            let _ = tx.send(item);
+                            let _ = tx_retry.send(item);
                             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                         } else {
                             error!("CRITICAL: Background write failed after 10 retries: {}", e);

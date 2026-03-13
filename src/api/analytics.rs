@@ -70,7 +70,8 @@ async fn get_lead_stats(
 ) -> Result<Json<LeadStats>, AppError> {
     let total = sqlx::query_scalar!("SELECT COUNT(*) FROM leads")
         .fetch_one(&state.pool)
-        .await?
+        .await
+        .map(|c: i64| c)
         .unwrap_or(0);
 
     let by_status = sqlx::query_as!(
@@ -106,7 +107,8 @@ async fn get_interaction_stats(
 ) -> Result<Json<InteractionStats>, AppError> {
     let total = sqlx::query_scalar!("SELECT COUNT(*) FROM interactions")
         .fetch_one(&state.pool)
-        .await?
+        .await
+        .map(|c: i64| c)
         .unwrap_or(0);
 
     let by_channel = sqlx::query_as!(
@@ -146,7 +148,7 @@ async fn get_opportunity_stats(
 
     Ok(Json(OpportunityStats {
         total: stats.count.unwrap_or(0),
-        total_value: stats.total_value.map(|v| v.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+        total_value: stats.total_value.map(|v| v.to_f64().unwrap_or(0.0)).unwrap_or(0.0),
         by_stage
     }))
 }
@@ -154,10 +156,26 @@ async fn get_opportunity_stats(
 async fn get_overall_stats(
     State(state): State<AppState>,
 ) -> Result<Json<OverallStats>, AppError> {
-    let leads = sqlx::query_scalar!("SELECT COUNT(*) FROM leads").fetch_one(&state.pool).await?.unwrap_or(0);
-    let interactions = sqlx::query_scalar!("SELECT COUNT(*) FROM interactions").fetch_one(&state.pool).await?.unwrap_or(0);
-    let opportunities = sqlx::query_scalar!("SELECT COUNT(*) FROM opportunities").fetch_one(&state.pool).await?.unwrap_or(0);
-    let tasks = sqlx::query_scalar!("SELECT COUNT(*) FROM sales_marketing_tasks").fetch_one(&state.pool).await?.unwrap_or(0);
+    let leads = sqlx::query_scalar!("SELECT COUNT(*) FROM leads")
+        .fetch_one(&state.pool)
+        .await
+        .map(|c: i64| c)
+        .unwrap_or(0);
+    let interactions = sqlx::query_scalar!("SELECT COUNT(*) FROM interactions")
+        .fetch_one(&state.pool)
+        .await
+        .map(|c: i64| c)
+        .unwrap_or(0);
+    let opportunities = sqlx::query_scalar!("SELECT COUNT(*) FROM opportunities")
+        .fetch_one(&state.pool)
+        .await
+        .map(|c: i64| c)
+        .unwrap_or(0);
+    let tasks = sqlx::query_scalar!("SELECT COUNT(*) FROM sales_marketing_tasks")
+        .fetch_one(&state.pool)
+        .await
+        .map(|c: i64| c)
+        .unwrap_or(0);
 
     Ok(Json(OverallStats { leads, interactions, opportunities, tasks }))
 }

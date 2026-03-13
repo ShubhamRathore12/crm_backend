@@ -167,8 +167,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     // Handle outgoing messages
     while let Some(msg) = receiver.next().await {
-        if let Ok(text) = msg {
-            if let Ok(ws_message) = serde_json::from_str::<WebSocketMessage>(&text) {
+        if let Ok(msg) = msg {
+            if let Message::Text(text) = msg {
+                if let Ok(ws_message) = serde_json::from_str::<WebSocketMessage>(&text) {
                 match ws_message {
                     WebSocketMessage::Heartbeat { .. } => {
                         // Respond to heartbeat

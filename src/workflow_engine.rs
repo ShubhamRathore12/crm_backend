@@ -88,7 +88,7 @@ impl WorkflowEngine {
     ) -> Result<NodeExecutionResult, AppError> {
         let workflow = self.load_workflow(workflow_id).await?;
         let definition: WorkflowDefinition = serde_json::from_value(workflow.definition_json)
-            .map_err(|e| AppError::BadRequest(format("Invalid workflow definition: {}", e)))?;
+            .map_err(|e| AppError::BadRequest(format!("Invalid workflow definition: {}", e)))?;
 
         self.execute_nodes(definition, context).await
     }
