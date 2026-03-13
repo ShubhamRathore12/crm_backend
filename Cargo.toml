@@ -6,7 +6,7 @@ description = "SMC CRM Backend — Axum + PostgreSQL"
 
 [dependencies]
 # Web
-axum = { version = "0.7", features = ["json", "macros", "tokio"] }
+axum = { version = "0.7", features = ["json", "macros", "tokio", "ws"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 

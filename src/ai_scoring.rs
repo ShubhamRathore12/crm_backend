@@ -17,7 +17,7 @@ pub struct LeadScore {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ScoreFactor {
     pub name: String,
     pub value: f64,
@@ -47,7 +47,7 @@ pub struct ConversationAnalysis {
 }
 
 pub struct AIScoringEngine {
-    state: AppState,
+    pub state: AppState,
 }
 
 impl AIScoringEngine {
@@ -138,10 +138,12 @@ impl AIScoringEngine {
 
     async fn get_lead_scoring_data(&self, lead_id: Uuid) -> Result<LeadScoringData, AppError> {
         // Query lead, contact, interactions, and related data
-        let lead = sqlx::query!(
+        let lead = sqlx::query_as!(
+            LeadScoringRecord,
             r#"
-            SELECT l.*, c.name as contact_name, c.email, c.mobile, c.pan,
-                   c.created_at as contact_created_at
+            SELECT l.id, l.source, l.status, l.stage, l.assigned_to, l.created_at,
+                   c.name as contact_name, c.email, c.mobile, c.pan,
+                   c.created_at as contact_created_at, l.contact_id
             FROM leads l
             JOIN contacts c ON l.contact_id = c.id
             WHERE l.id = $1
@@ -177,6 +179,12 @@ impl AIScoringEngine {
         .fetch_one(&self.state.pool)
         .await
         .unwrap_or(0);
+
+        Ok(LeadScoringData {
+            lead,
+            interactions,
+            message_count,
+        })
     }
 
     async fn calculate_score_factors(&self, data: &LeadScoringData) -> Vec<ScoreFactor> {
@@ -255,7 +263,7 @@ impl AIScoringEngine {
         factors
     }
 
-    async fn generate_lead_prediction(&self, data: &LeadScoringData, score: f64) -> LeadPrediction {
+    async fn generate_lead_prediction(&self, _data: &LeadScoringData, score: f64) -> LeadPrediction {
         // Conversion probability based on score
         let conversion_probability = score.clamp(0.0, 1.0);
         
@@ -400,7 +408,7 @@ impl AIScoringEngine {
         }
     }
 
-    async fn generate_response_suggestions(&self, data: &ConversationData, intent: &str) -> Vec<String> {
+    async fn generate_response_suggestions(&self, _data: &ConversationData, intent: &str) -> Vec<String> {
         match intent {
             "pricing_inquiry" => vec![
                 "I'd be happy to discuss our pricing options with you.".to_string(),
@@ -455,18 +463,18 @@ impl AIScoringEngine {
         })
     }
 
-    async fn get_historical_sales_data(&self, days_back: i32) -> Result<Vec<SalesDataPoint>, AppError> {
+    async fn get_historical_sales_data(&self, _days_back: i32) -> Result<Vec<SalesDataPoint>, AppError> {
         // This would query actual sales data in a real implementation
         // For now, return mock data
         Ok(vec![])
     }
 
-    async fn predict_revenue(&self, data: &[SalesDataPoint], days_ahead: i32) -> f64 {
+    async fn predict_revenue(&self, _data: &[SalesDataPoint], days_ahead: i32) -> f64 {
         // Simplified prediction - in production use ML models
         100000.0 * (days_ahead as f64 / 30.0) // $100k per month
     }
 
-    async fn predict_deal_count(&self, data: &[SalesDataPoint], days_ahead: i32) -> i32 {
+    async fn predict_deal_count(&self, _data: &[SalesDataPoint], days_ahead: i32) -> i32 {
         // Simplified prediction
         (days_ahead / 7) * 5 // 5 deals per week
     }
@@ -482,7 +490,7 @@ impl AIScoringEngine {
         }
     }
 
-    async fn get_prediction_factors(&self, data: &[SalesDataPoint]) -> Vec<String> {
+    async fn get_prediction_factors(&self, _data: &[SalesDataPoint]) -> Vec<String> {
         vec![
             "Historical conversion rates".to_string(),
             "Seasonal trends".to_string(),
@@ -494,18 +502,34 @@ impl AIScoringEngine {
 
 #[derive(Debug)]
 struct LeadScoringData {
-    lead: sqlx::types::PgRow,
+    lead: LeadScoringRecord,
     interactions: Vec<InteractionData>,
     message_count: i64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::FromRow)]
+struct LeadScoringRecord {
+    id: Uuid,
+    source: String,
+    status: String,
+    stage: String,
+    assigned_to: Option<Uuid>,
+    created_at: DateTime<Utc>,
+    contact_name: String,
+    email: Option<String>,
+    mobile: String,
+    pan: Option<String>,
+    contact_created_at: DateTime<Utc>,
+    contact_id: Uuid,
+}
+
+#[derive(Debug, sqlx::FromRow)]
 struct InteractionData {
     id: Uuid,
     channel: String,
     subject: String,
     status: String,
-    priority: String,
+    priority: Option<String>,
     created_at: DateTime<Utc>,
 }
 

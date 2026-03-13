@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use super::claims::Claims;
 use crate::{error::AppError, AppState};
 use bcrypt::verify;
-use sqlx::Row;
 
 mod claims;
 

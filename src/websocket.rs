@@ -109,9 +109,9 @@ impl WebSocketManager {
         let _ = self.message_channel.send(message);
     }
 
-    pub async fn send_to_user(&self, user_id: &str, message: WebSocketMessage) {
+    pub async fn send_to_user(&self, _user_id: &str, message: WebSocketMessage) {
         let connections = self.connections.read().await;
-        for (conn_id, tx) in connections.iter() {
+        for (_conn_id, tx) in connections.iter() {
             // In a real implementation, you'd map connection IDs to user IDs
             // For now, we'll broadcast to all connections
             let _ = tx.send(message.clone());
@@ -137,56 +137,55 @@ pub async fn websocket_handler(
 async fn handle_socket(socket: WebSocket, state: AppState) {
     let connection_id = Uuid::new_v4().to_string();
     let tx = state.websocket_manager.add_connection(connection_id.clone()).await;
-    let mut rx = tx.subscribe();
+    let mut broadcast_rx = tx.subscribe();
 
     let (mut sender, mut receiver) = socket.split();
 
-    // Spawn task to handle incoming messages
+    // Task for outgoing messages: Broadcast -> Client
     let connection_id_clone = connection_id.clone();
     let websocket_manager_clone = state.websocket_manager.clone();
-    tokio::spawn(async move {
-        while let Some(msg) = receiver.next().await {
-            if let Ok(msg) = msg {
-                let message_text = match serde_json::to_string(&msg) {
-                    Ok(text) => text,
-                    Err(e) => {
-                        tracing::error!("Failed to serialize WebSocket message: {}", e);
-                        continue;
-                    }
-                };
-
-                if sender.send(Message::Text(message_text)).await.is_err() {
-                    break;
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(msg) = broadcast_rx.recv().await {
+            let message_text = match serde_json::to_string(&msg) {
+                Ok(text) => text,
+                Err(e) => {
+                    tracing::error!("Failed to serialize WebSocket message: {}", e);
+                    continue;
                 }
+            };
+            if sender.send(Message::Text(message_text)).await.is_err() {
+                break;
             }
         }
-        
-        // Connection closed
         websocket_manager_clone.remove_connection(&connection_id_clone).await;
     });
 
-    // Handle outgoing messages
-    while let Some(msg) = receiver.next().await {
-        if let Ok(msg) = msg {
+    // Task for incoming messages: Client -> Server
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
             if let Message::Text(text) = msg {
                 if let Ok(ws_message) = serde_json::from_str::<WebSocketMessage>(&text) {
                     match ws_message {
                         WebSocketMessage::Heartbeat { .. } => {
-                            // Respond to heartbeat
                             let response = WebSocketMessage::Heartbeat {
                                 timestamp: chrono::Utc::now(),
                             };
                             let _ = tx.send(response);
                         }
                         _ => {
-                            // Handle other message types if needed
                             tracing::debug!("Received WebSocket message: {:?}", ws_message);
                         }
                     }
                 }
             }
         }
-    }
+    });
+
+    // Wait for either task to finish
+    tokio::select! {
+        _ = (&mut send_task) => recv_task.abort(),
+        _ = (&mut recv_task) => send_task.abort(),
+    };
 }
 
 // Helper functions for sending specific message types
