@@ -170,17 +170,18 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         if let Ok(msg) = msg {
             if let Message::Text(text) = msg {
                 if let Ok(ws_message) = serde_json::from_str::<WebSocketMessage>(&text) {
-                match ws_message {
-                    WebSocketMessage::Heartbeat { .. } => {
-                        // Respond to heartbeat
-                        let response = WebSocketMessage::Heartbeat {
-                            timestamp: chrono::Utc::now(),
-                        };
-                        let _ = tx.send(response);
-                    }
-                    _ => {
-                        // Handle other message types if needed
-                        tracing::debug!("Received WebSocket message: {:?}", ws_message);
+                    match ws_message {
+                        WebSocketMessage::Heartbeat { .. } => {
+                            // Respond to heartbeat
+                            let response = WebSocketMessage::Heartbeat {
+                                timestamp: chrono::Utc::now(),
+                            };
+                            let _ = tx.send(response);
+                        }
+                        _ => {
+                            // Handle other message types if needed
+                            tracing::debug!("Received WebSocket message: {:?}", ws_message);
+                        }
                     }
                 }
             }

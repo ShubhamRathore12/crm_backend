@@ -191,12 +191,12 @@ async fn run_workflow(
 }
 
 struct WorkflowRow {
-    id: Uuid,
-    name: String,
-    trigger: String,
-    definition_json: serde_json::Value,
-    active: bool,
-    created_at: chrono::DateTime<chrono::Utc>,
+    pub id: Uuid,
+    pub name: String,
+    pub trigger: String,
+    pub definition_json: serde_json::Value,
+    pub active: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl From<WorkflowRow> for WorkflowResponse {

@@ -133,8 +133,7 @@ async fn add_member(
 
 async fn remove_member(
     State(state): State<AppState>,
-    Path(_id): Path<Uuid>,
-    Path(user_id): Path<Uuid>,
+    Path((id, user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     sqlx::query!("UPDATE users SET team_id = NULL WHERE id = $1", user_id)
         .execute(&state.pool)

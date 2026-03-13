@@ -72,7 +72,7 @@ impl AIScoringEngine {
         let prediction = self.generate_lead_prediction(&lead_data, total_score).await;
         
         // Calculate confidence based on data completeness
-        let confidence = self.calculate_confidence(&lead_data);
+        let confidence = self.calculate_confidence(&lead_data).await;
         
         Ok(LeadScore {
             lead_id,
@@ -104,7 +104,7 @@ impl AIScoringEngine {
         let next_best_action = self.recommend_next_action(&conversation_data, sentiment, engagement_score).await;
         
         // Generate response suggestions
-        let response_suggestions = self.generate_response_suggestions(&conversation_data, intent_detected).await;
+        let response_suggestions = self.generate_response_suggestions(&conversation_data, &intent_detected).await;
         
         Ok(ConversationAnalysis {
             interaction_id,
@@ -165,23 +165,18 @@ impl AIScoringEngine {
         .fetch_all(&self.state.pool)
         .await?;
 
-        let message_count = sqlx::query_scalar!(
+        let message_count = sqlx::query_scalar::<_, i64>(
             r#"
-            SELECT COUNT(*) as count
+            SELECT COUNT(*)
             FROM messages m
             JOIN interactions i ON m.interaction_id = i.id
             WHERE i.contact_id = $1
-            "#,
-            lead.contact_id
+            "#
         )
+        .bind(lead.contact_id)
         .fetch_one(&self.state.pool)
-        .await?;
-
-        Ok(LeadScoringData {
-            lead,
-            interactions,
-            message_count: message_count.unwrap_or(0) as i64,
-        })
+        .await
+        .unwrap_or(0);
     }
 
     async fn calculate_score_factors(&self, data: &LeadScoringData) -> Vec<ScoreFactor> {
@@ -205,7 +200,7 @@ impl AIScoringEngine {
         });
 
         // Lead age scoring (newer is better)
-        let days_since_creation = (Utc::now() - data.lead.created_at).num_days();
+        let days_since_creation = (Utc::now() - data.lead.created_at).num_seconds() / 86400;
         let age_score = 1.0 - (days_since_creation as f64 / 365.0).min(1.0);
         factors.push(ScoreFactor {
             name: "Lead Freshness".to_string(),
@@ -305,7 +300,7 @@ impl AIScoringEngine {
     }
 
     async fn calculate_confidence(&self, data: &LeadScoringData) -> f64 {
-        let mut confidence = 0.5; // Base confidence
+        let mut confidence: f64 = 0.5; // Base confidence
         
         // Higher confidence with more data
         if data.message_count > 0 {
@@ -408,53 +403,55 @@ impl AIScoringEngine {
     async fn generate_response_suggestions(&self, data: &ConversationData, intent: &str) -> Vec<String> {
         match intent {
             "pricing_inquiry" => vec![
-                "I'd be happy to discuss our pricing options with you.",
-                "Let me schedule a call to go over our packages.",
-                "I can send you our pricing sheet right away."
+                "I'd be happy to discuss our pricing options with you.".to_string(),
+                "Let me schedule a call to go over our packages.".to_string(),
+                "I can send you our pricing sheet right away.".to_string()
             ],
             "demo_request" => vec![
-                "I can schedule a personalized demo for you.",
-                "Would you prefer a live demo or a recorded walkthrough?",
-                "Let me find a time that works for your schedule."
+                "I can schedule a personalized demo for you.".to_string(),
+                "Would you prefer a live demo or a recorded walkthrough?".to_string(),
+                "Let me find a time that works for your schedule.".to_string()
             ],
             "purchase_intent" => vec![
-                "Great! Let's discuss the next steps for getting started.",
-                "I can help you with the onboarding process.",
-                "Let me connect you with our sales team."
+                "Great! Let's discuss the next steps for getting started.".to_string(),
+                "I can help you with the onboarding process.".to_string(),
+                "Let me connect you with our sales team.".to_string()
             ],
             _ => vec![
-                "Thank you for your interest. How can I help you today?",
-                "I'm here to answer any questions you might have.",
-                "What would you like to know more about?"
+                "Thank you for your interest. How can I help you today?".to_string(),
+                "I'm here to answer any questions you might have.".to_string(),
+                "What would you like to know more about?".to_string()
             ]
         }
     }
 
     async fn get_conversation_data(&self, interaction_id: Uuid) -> Result<ConversationData, AppError> {
-        let messages = sqlx::query_scalar!(
-            "SELECT content FROM messages WHERE interaction_id = $1 ORDER BY created_at",
-            interaction_id
+        let messages = sqlx::query_scalar::<_, String>(
+            "SELECT content FROM messages WHERE interaction_id = $1 ORDER BY created_at"
         )
+        .bind(interaction_id)
         .fetch_all(&self.state.pool)
         .await?;
 
-        let avg_response_time = sqlx::query_scalar!(
+        let avg_response_time = sqlx::query_scalar::<_, Option<f64>>(
             r#"
-            SELECT AVG(EXTRACT(EPOCH FROM (m2.created_at - m1.created_at)) / 3600) as avg_time
+            SELECT AVG(EXTRACT(EPOCH FROM (m2.created_at - m1.created_at)) / 3600)
             FROM messages m1
             JOIN messages m2 ON m1.interaction_id = m2.interaction_id 
                 AND m2.created_at > m1.created_at
                 AND m1.sender != m2.sender
             WHERE m1.interaction_id = $1
-            "#,
-            interaction_id
+            "#
         )
+        .bind(interaction_id)
         .fetch_one(&self.state.pool)
-        .await?;
+        .await
+        .unwrap_or(None)
+        .unwrap_or(0.0);
 
         Ok(ConversationData {
-            messages: messages.into_iter().flatten().collect(),
-            avg_response_time_hours: avg_response_time.unwrap_or(0.0),
+            messages,
+            avg_response_time_hours: avg_response_time,
         })
     }
 

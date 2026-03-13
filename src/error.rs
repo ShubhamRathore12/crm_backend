@@ -22,6 +22,10 @@ pub enum AppError {
     #[error("Database error: {0}")]
     Db(#[from] sqlx::Error),
 
+    #[error("Internal error: {0}")]
+    Internal(#[from] anyhow::Error),
+}
+
 impl From<reqwest::Error> for AppError {
     fn from(err: reqwest::Error) -> Self {
         AppError::Internal(anyhow::anyhow!("HTTP request failed: {}", err))

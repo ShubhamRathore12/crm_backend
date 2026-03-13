@@ -137,15 +137,15 @@ async fn import_contacts(
 }
 
 struct ContactRow {
-    id: Uuid,
-    ucc_code: String,
-    name: String,
-    mobile: String,
-    email: Option<String>,
-    pan: Option<String>,
-    address: Option<String>,
-    custom_fields: serde_json::Value,
-    created_at: chrono::DateTime<chrono::Utc>,
+    pub id: Uuid,
+    pub ucc_code: String,
+    pub name: String,
+    pub mobile: String,
+    pub email: Option<String>,
+    pub pan: Option<String>,
+    pub address: Option<String>,
+    pub custom_fields: serde_json::Value,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl From<ContactRow> for ContactResponse {

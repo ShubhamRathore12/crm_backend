@@ -141,7 +141,11 @@ impl WorkflowEngine {
             last_result = Some(result.clone());
 
             // Find next node based on edges
-            current_node_id = self.find_next_node(&definition, &node_id, &result).await?;
+            if let Some(next_node_id) = self.find_next_node(&definition, &node_id, &result).await? {
+                current_node_id = next_node_id;
+            } else {
+                break;
+            }
 
             // Update context history
             context.history.push(result);
@@ -167,7 +171,7 @@ impl WorkflowEngine {
 
         for edge in edges {
             if let Some(condition) = &edge.condition {
-                if self.evaluate_condition(condition, &result.result).await? {
+                if self.evaluate_condition(condition, &result.result.as_ref().map(|v| v.clone())).await? {
                     return Ok(Some(edge.target.clone()));
                 }
             } else {
@@ -224,7 +228,7 @@ impl WorkflowEngine {
             .and_then(|v| v.as_str())
             .ok_or_else(|| AppError::BadRequest("Condition node missing condition".into()))?;
 
-        let result = self.evaluate_condition(condition, &context.trigger_data).await?;
+        let result = self.evaluate_condition(condition, &Some(context.trigger_data.clone())).await?;
 
         Ok(NodeExecutionResult {
             node_id: node.id.clone(),
